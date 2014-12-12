@@ -7,17 +7,20 @@ import java.io.FileWriter;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.concurrent.TimeUnit;
 
 public class DBsubnet {
     
     private Connection con;
+    private Connection con2;
     private Statement st;
     private Statement st1;
+    private Statement st2;
     private ResultSet rs;
-    private ResultSet r1;
+    private ResultSet rs1;
+    private ResultSet rs2;
     private String query;
     private String query1;
+    private String query2;
     
     private File file = new File("/home/chiran/Desktop/mylog.log");
     private FileWriter writer;
@@ -34,9 +37,12 @@ public class DBsubnet {
                 Class.forName("com.mysql.jdbc.Driver");
                 
                 con = DriverManager.getConnection("jdbc:mysql://localhost:3306","root",pw);
+                con2 = DriverManager.getConnection("jdbc:mysql://localhost:3306","root",pw);
                 st = con.createStatement();
                 
                 st1 = con.createStatement();
+                
+                st2 = con2.createStatement();
                 
                 query = "CREATE DATABASE IF NOT EXISTS sshblock";     //Creating DB if doesn't exist      
                 st.executeUpdate(query);
@@ -96,15 +102,15 @@ public class DBsubnet {
     
     public void blocking(){
         
-    //    while (true){
+        while (true){
         
             try{
 
-                query1 = "SELECT  * , COUNT(*) c "
+                query = "SELECT  * , COUNT(*) c "
                         + "FROM subnets "
                         + "GROUP BY IPrangeStart HAVING c > 4";
 
-                rs = st1.executeQuery(query1);
+                rs = st.executeQuery(query);
 
                 while (rs.next()){
 
@@ -112,9 +118,9 @@ public class DBsubnet {
                     String IPrangeStart = rs.getString("IPrangeStart");
                     String IPrangeEnd = rs.getString("IPrangeEnd");
 
-                    System.out.println(IPAddress + " " + IPrangeStart + " " + " " + IPrangeEnd);
+                    //System.out.println(IPAddress + " " + IPrangeStart + " " + " " + IPrangeEnd);
                     
-                    //if(!containsRange(IPrangeStart)){
+                    if(!containsRange(IPrangeStart)){
                         
                         query = "INSERT INTO subnetsblock VALUES (?, ?, ?, ?, ?, ?);";
 
@@ -169,8 +175,8 @@ public class DBsubnet {
                         preparedStmt.setDate (3,date);
                         preparedStmt.setTime (4,time);
 
-                        preparedStmt.setDate (5,date1);
-                        preparedStmt.setTime (6,time1);  
+                        preparedStmt.setDate (5,date);
+                        preparedStmt.setTime (6,time);  
 
                         preparedStmt.executeUpdate();
 
@@ -178,7 +184,7 @@ public class DBsubnet {
 
 
                         //http://www.linuxquestions.org/questions/linux-networking-3/iptables-block-ip-subnets-277040/
-                        String myStr = date + "\t" + time + "\tiptables -I INPUT -s " + IPrangeStart + "/" + IPrangeEnd + " -j DROP";
+                        String myStr = date + "\t" + time + "\tiptables -A INPUT -s " + IPrangeStart + "/" + IPrangeEnd + " -j DROP";
 
                         System.out.println(myStr);
 
@@ -194,15 +200,15 @@ public class DBsubnet {
                         bwriter.close();
 
 
-                        /*query = "DELETE FROM subnets WHERE IPrangeStart = ?";
+                        query = "DELETE FROM subnets WHERE IPrangeStart = ?";
 
                         preparedStmt = con.prepareStatement(query);
 
                         preparedStmt.setString (1, IPrangeStart);
 
-                        preparedStmt.executeUpdate();*/
+                        preparedStmt.executeUpdate();
                     
-                    //}
+                    }
 
                 }
 
@@ -212,7 +218,7 @@ public class DBsubnet {
 
             }
             
-     //   }
+        }
         
     }
     
@@ -220,19 +226,56 @@ public class DBsubnet {
         
         while (true){
         
-            //System.out.println("ss");
-            
             try{
+                
+                query2 = "USE sshblock";
+                
+                st2.executeQuery(query2);
+                
+                query2 = "SELECT IPrangeStart , IPrangeEnd FROM subnetsblock"
+                        + " WHERE releaseDate < NOW() AND releaseTime < NOW()";
+                
+                rs2 = st2.executeQuery(query2);
+                
+                while (rs2.next()){
                     
-                TimeUnit.MILLISECONDS.sleep(1);
-                        
+                    String IPrangeStart = rs2.getString("IPrangeStart");
+                    String IPrangeEnd = rs2.getString("IPrangeEnd");
+                    
+                    java.sql.Time time = getCurrentJavaSqlTime();
+                    java.sql.Date date = getCurrentJavaSqlDate();
+                    
+                    String myStr = date + "\t" + time + "\tiptables -D INPUT -s " + IPrangeStart + "/" + IPrangeEnd + " -j DROP";
+                    
+                    System.out.println(myStr);
+                    
+                    query2 = "DELETE FROM subnetsblock WHERE IPrangeStart = ?";
+                    
+                    PreparedStatement preparedStmt = con2.prepareStatement(query2);
+
+                    preparedStmt.setString (1, IPrangeStart);
+
+                    preparedStmt.executeUpdate();
+                    
+                    if(!file.exists()){
+
+                            file.createNewFile();
+
+                    }
+
+                    writer = new FileWriter(file.getAbsolutePath(),true);
+                    bwriter = new BufferedWriter(writer);
+                    bwriter.write(myStr+"\n");
+                    bwriter.close();
+                    
+                }
+                
             }catch (Exception ex){
                 
                 System.out.println(ex);
                 
             }
-            
-        
+                    
         }
         
     }
@@ -241,13 +284,13 @@ public class DBsubnet {
         
         try{
         
-            query = "SELECT * FROM subnetsblock WHERE IPrangeStart = \'" + str + "\'";
+            query1 = "SELECT * FROM subnetsblock WHERE IPrangeStart = \'" + str + "\'";
 
-            rs = st.executeQuery(query);
+            rs1 = st1.executeQuery(query1);
             
             
             
-            while (rs.next()){
+            while (rs1.next()){
             
                 return true;
             
@@ -257,7 +300,7 @@ public class DBsubnet {
             
         }catch (Exception ex){
             
-            //System.out.println(ex);
+            System.out.println(ex);
             
         }
         
